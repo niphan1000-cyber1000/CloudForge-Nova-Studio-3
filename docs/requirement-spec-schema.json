@@ -1,0 +1,199 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cloudforge-nova-studio.dev/schemas/requirement-spec.json",
+  "title": "CloudForge Requirement Spec",
+  "description": "สัญญากลางที่ทุก Agent ในระบบใช้ร่วมกัน สร้างขึ้นโดย Requirements Agent จากการสนทนากับผู้ใช้",
+  "type": "object",
+  "required": ["project_name", "workload_type", "scale", "budget", "compliance", "cloud_preference"],
+  "properties": {
+
+    "project_name": {
+      "type": "string",
+      "description": "ชื่อโปรเจกต์หรือระบบที่จะสร้าง"
+    },
+
+    "workload_type": {
+      "type": "string",
+      "description": "ประเภทของ workload หลัก",
+      "enum": [
+        "web_application",
+        "api_backend",
+        "data_pipeline",
+        "machine_learning",
+        "batch_processing",
+        "static_website",
+        "microservices",
+        "other"
+      ]
+    },
+
+    "scale": {
+      "type": "object",
+      "description": "ขนาดของระบบที่คาดการณ์ไว้",
+      "required": ["expected_users"],
+      "properties": {
+        "expected_users": {
+          "type": "integer",
+          "description": "จำนวนผู้ใช้ที่คาดว่าจะใช้งานพร้อมกัน (concurrent) หรือรายเดือน"
+        },
+        "expected_requests_per_second": {
+          "type": "integer",
+          "description": "จำนวน request ต่อวินาทีโดยประมาณ (ถ้าทราบ)"
+        },
+        "data_volume_gb": {
+          "type": "number",
+          "description": "ปริมาณข้อมูลโดยประมาณ (GB)"
+        },
+        "growth_expectation": {
+          "type": "string",
+          "enum": ["stable", "moderate_growth", "rapid_growth", "unpredictable"],
+          "description": "แนวโน้มการเติบโตของระบบ"
+        }
+      }
+    },
+
+    "availability": {
+      "type": "object",
+      "description": "ความต้องการด้านความพร้อมใช้งาน",
+      "properties": {
+        "sla_target": {
+          "type": "string",
+          "enum": ["99%", "99.9%", "99.95%", "99.99%"],
+          "description": "เป้าหมาย SLA (uptime)"
+        },
+        "multi_region": {
+          "type": "boolean",
+          "description": "ต้องการ deploy หลาย region หรือไม่"
+        },
+        "disaster_recovery": {
+          "type": "boolean",
+          "description": "ต้องการแผน disaster recovery หรือไม่"
+        }
+      }
+    },
+
+    "budget": {
+      "type": "object",
+      "required": ["tier"],
+      "properties": {
+        "tier": {
+          "type": "string",
+          "enum": ["minimal", "low", "medium", "high", "enterprise"],
+          "description": "ระดับงบประมาณโดยรวม"
+        },
+        "monthly_budget_usd": {
+          "type": "number",
+          "description": "งบประมาณต่อเดือนโดยประมาณ (USD) ถ้าทราบตัวเลขจริง"
+        },
+        "cost_priority": {
+          "type": "string",
+          "enum": ["minimize_cost", "balanced", "prioritize_performance"],
+          "description": "ให้ความสำคัญกับต้นทุนมากแค่ไหนเทียบกับ performance"
+        }
+      }
+    },
+
+    "compliance": {
+      "type": "object",
+      "properties": {
+        "standards": {
+          "type": "array",
+          "description": "มาตรฐาน compliance ที่ต้องปฏิบัติตาม",
+          "items": {
+            "type": "string",
+            "enum": ["PDPA", "GDPR", "HIPAA", "PCI-DSS", "SOC2", "ISO27001", "none"]
+          }
+        },
+        "data_residency": {
+          "type": "array",
+          "description": "ประเทศ/ภูมิภาคที่ข้อมูลต้องถูกเก็บอยู่ (ถ้ามีข้อจำกัด)",
+          "items": { "type": "string" }
+        },
+        "data_sensitivity": {
+          "type": "string",
+          "enum": ["public", "internal", "confidential", "restricted"],
+          "description": "ระดับความอ่อนไหวของข้อมูลที่ระบบจะจัดเก็บ"
+        }
+      }
+    },
+
+    "cloud_preference": {
+      "type": "object",
+      "required": ["providers"],
+      "properties": {
+        "providers": {
+          "type": "array",
+          "description": "cloud provider ที่ต้องการใช้ (เลือกได้มากกว่า 1 สำหรับ multi-cloud)",
+          "items": {
+            "type": "string",
+            "enum": ["aws", "azure", "gcp"]
+          },
+          "minItems": 1
+        },
+        "preferred_regions": {
+          "type": "array",
+          "description": "ภูมิภาคที่ต้องการ deploy เช่น ap-southeast-1",
+          "items": { "type": "string" }
+        },
+        "existing_infrastructure": {
+          "type": "string",
+          "description": "ระบบเดิมที่มีอยู่แล้ว (ถ้ามี) เพื่อพิจารณาการเชื่อมต่อหรือ migration"
+        }
+      }
+    },
+
+    "technical_constraints": {
+      "type": "object",
+      "properties": {
+        "preferred_languages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "ภาษาโปรแกรมที่ทีมถนัด"
+        },
+        "container_strategy": {
+          "type": "string",
+          "enum": ["kubernetes", "serverless", "vm_based", "hybrid", "no_preference"],
+          "description": "แนวทาง deployment ที่ต้องการ"
+        },
+        "database_needs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["relational", "nosql", "cache", "data_warehouse", "search_engine"]
+          }
+        }
+      }
+    },
+
+    "security_requirements": {
+      "type": "object",
+      "properties": {
+        "requires_vpc_isolation": { "type": "boolean" },
+        "requires_encryption_at_rest": { "type": "boolean" },
+        "requires_encryption_in_transit": { "type": "boolean" },
+        "requires_mfa": { "type": "boolean" },
+        "requires_audit_logging": { "type": "boolean" }
+      }
+    },
+
+    "timeline": {
+      "type": "object",
+      "properties": {
+        "target_launch_date": {
+          "type": "string",
+          "format": "date",
+          "description": "วันที่ต้องการเปิดใช้งานระบบ"
+        },
+        "urgency": {
+          "type": "string",
+          "enum": ["low", "medium", "high", "critical"]
+        }
+      }
+    },
+
+    "additional_notes": {
+      "type": "string",
+      "description": "ข้อมูลเพิ่มเติมที่ไม่ตรงกับ field ใดๆ ข้างต้น"
+    }
+  }
+}
