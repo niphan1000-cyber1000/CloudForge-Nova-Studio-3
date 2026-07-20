@@ -1,0 +1,47 @@
+{
+  "project_name": "ระบบ E-commerce สำหรับร้านค้าออนไลน์",
+  "workload_type": "web_application",
+  "scale": {
+    "expected_users": 10000,
+    "expected_requests_per_second": 200,
+    "data_volume_gb": 50,
+    "growth_expectation": "moderate_growth"
+  },
+  "availability": {
+    "sla_target": "99.9%",
+    "multi_region": false,
+    "disaster_recovery": true
+  },
+  "budget": {
+    "tier": "medium",
+    "monthly_budget_usd": 1500,
+    "cost_priority": "balanced"
+  },
+  "compliance": {
+    "standards": ["PDPA"],
+    "data_residency": ["Thailand"],
+    "data_sensitivity": "confidential"
+  },
+  "cloud_preference": {
+    "providers": ["aws"],
+    "preferred_regions": ["ap-southeast-1"],
+    "existing_infrastructure": "ไม่มี เริ่มต้นใหม่ทั้งหมด"
+  },
+  "technical_constraints": {
+    "preferred_languages": ["python", "typescript"],
+    "container_strategy": "serverless",
+    "database_needs": ["relational", "cache"]
+  },
+  "security_requirements": {
+    "requires_vpc_isolation": true,
+    "requires_encryption_at_rest": true,
+    "requires_encryption_in_transit": true,
+    "requires_mfa": true,
+    "requires_audit_logging": true
+  },
+  "timeline": {
+    "target_launch_date": "2026-10-01",
+    "urgency": "medium"
+  },
+  "additional_notes": "ต้องรองรับการชำระเงินผ่าน PromptPay และบัตรเครดิต"
+}
