@@ -1,0 +1,247 @@
+"""
+CloudForge Nova Studio 3 — Mock Agent Pipeline
+================================================
+ไฟล์นี้รวม 3 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline แรก
+ของระบบ ยังไม่ได้เรียก Claude API จริง (ใช้ hardcoded logic แทนไปพลางๆ)
+เพื่อทดสอบโครงสร้างของระบบ Multi-Agent ก่อน
+
+Pipeline:
+    Requirements Agent -> Architecture Agent -> IaC Generator Agent
+
+พัฒนาและทดสอบครั้งแรกบน Google Colab
+ดู schema ที่ใช้ร่วมกันได้ที่ docs/requirement-spec-schema.json
+"""
+
+import json
+
+
+# ============================================================
+# Agent 1: Requirements Agent (Mock)
+# ============================================================
+def analyze_requirement_mock(user_input: str) -> dict:
+    """
+    เวอร์ชันจำลองของ Requirements Agent
+    รับคำอธิบายโปรเจกต์จากผู้ใช้ (ข้อความอิสระ) แล้วคืนค่าเป็น
+    Requirement Spec ตาม schema ที่กำหนดไว้ใน docs/requirement-spec-schema.json
+
+    TODO: เปลี่ยนให้เรียก Claude API จริง แทนการคืนค่าตายตัว
+    """
+    print(f"📥 ได้รับ requirement จากผู้ใช้: \n\"{user_input}\"\n")
+    print("🤖 (จำลอง) กำลังวิเคราะห์...\n")
+
+    mock_result = {
+        "project_name": "ระบบตัวอย่างจาก Mock Agent",
+        "workload_type": "web_application",
+        "scale": {
+            "expected_users": 5000,
+            "expected_requests_per_second": 100,
+            "data_volume_gb": 20,
+            "growth_expectation": "moderate_growth"
+        },
+        "availability": {
+            "sla_target": "99.9%",
+            "multi_region": False,
+            "disaster_recovery": True
+        },
+        "budget": {
+            "tier": "medium",
+            "monthly_budget_usd": 1000,
+            "cost_priority": "balanced"
+        },
+        "compliance": {
+            "standards": ["PDPA"],
+            "data_residency": ["Thailand"],
+            "data_sensitivity": "internal"
+        },
+        "cloud_preference": {
+            "providers": ["aws"],
+            "preferred_regions": ["ap-southeast-1"],
+            "existing_infrastructure": "ไม่มี"
+        }
+    }
+
+    return mock_result
+
+
+# ============================================================
+# Agent 2: Architecture Agent (Mock)
+# ============================================================
+def design_architecture_mock(requirement_spec: dict) -> dict:
+    """
+    เวอร์ชันจำลองของ Architecture Agent
+    รับ Requirement Spec (ผลลัพธ์จาก Requirements Agent) แล้วออกแบบ
+    สถาปัตยกรรมคร่าวๆ กลับมา
+
+    TODO: เปลี่ยนให้เรียก Claude API จริง เพื่อออกแบบตาม requirement
+    ที่หลากหลายมากขึ้น (ตอนนี้ hardcode เฉพาะกรณี AWS + web_application)
+    """
+    provider = requirement_spec.get("cloud_preference", {}).get("providers", ["aws"])[0]
+    workload = requirement_spec.get("workload_type", "web_application")
+
+    print(f"📐 กำลังออกแบบสถาปัตยกรรมสำหรับ workload: {workload} บน provider: {provider}\n")
+
+    mock_architecture = {
+        "provider": provider,
+        "workload_type": workload,
+        "components": [
+            {
+                "name": "Load Balancer",
+                "service": "AWS Application Load Balancer (ALB)",
+                "purpose": "กระจาย traffic ไปยัง backend หลายตัว"
+            },
+            {
+                "name": "Compute",
+                "service": "AWS ECS Fargate" if requirement_spec.get("technical_constraints", {}).get("container_strategy") == "serverless" else "Amazon EC2 Auto Scaling Group",
+                "purpose": "รันแอปพลิเคชันหลัก"
+            },
+            {
+                "name": "Database",
+                "service": "Amazon RDS (PostgreSQL)",
+                "purpose": "จัดเก็บข้อมูลหลักแบบ relational"
+            },
+            {
+                "name": "Cache",
+                "service": "Amazon ElastiCache (Redis)",
+                "purpose": "ลด latency สำหรับข้อมูลที่เรียกใช้บ่อย"
+            },
+            {
+                "name": "Storage",
+                "service": "Amazon S3",
+                "purpose": "จัดเก็บไฟล์ static และ backup"
+            }
+        ],
+        "networking": {
+            "vpc": True,
+            "public_subnets": ["load_balancer"],
+            "private_subnets": ["compute", "database", "cache"]
+        },
+        "estimated_monthly_cost_usd": "800-1200 (โดยประมาณ ขึ้นอยู่กับ traffic จริง)"
+    }
+
+    return mock_architecture
+
+
+# ============================================================
+# Agent 3: IaC Generator Agent (Mock)
+# ============================================================
+def generate_iac_mock(architecture: dict) -> str:
+    """
+    เวอร์ชันจำลองของ IaC Generator Agent
+    รับผลลัพธ์จาก Architecture Agent แล้วแปลงเป็นโค้ด Terraform
+
+    TODO: เปลี่ยนให้เรียก Claude API จริง เพื่อสร้างโค้ดที่ปรับตาม
+    architecture ที่หลากหลายมากขึ้น (ตอนนี้ใช้ template ตายตัว)
+    """
+    provider = architecture.get("provider", "aws")
+    print(f"⚙️  กำลังสร้าง Terraform code สำหรับ provider: {provider}\n")
+
+    terraform_code = f'''# ==============================================
+# Terraform Configuration (Auto-generated by CloudForge Nova Studio)
+# Provider: {provider}
+# ==============================================
+
+terraform {{
+  required_providers {{
+    aws = {{
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }}
+  }}
+}}
+
+provider "aws" {{
+  region = "ap-southeast-1"
+}}
+
+# --- Networking: VPC ---
+resource "aws_vpc" "main" {{
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {{
+    Name = "cloudforge-vpc"
+  }}
+}}
+
+# --- Load Balancer ---
+resource "aws_lb" "main" {{
+  name               = "cloudforge-alb"
+  internal           = false
+  load_balancer_type = "application"
+
+  tags = {{
+    Name = "cloudforge-load-balancer"
+  }}
+}}
+
+# --- Compute: Auto Scaling Group ---
+resource "aws_autoscaling_group" "app" {{
+  name             = "cloudforge-asg"
+  min_size         = 2
+  max_size         = 6
+  desired_capacity = 2
+
+  tags = [
+    {{
+      key                 = "Name"
+      value               = "cloudforge-app-instance"
+      propagate_at_launch = true
+    }}
+  ]
+}}
+
+# --- Database: RDS PostgreSQL ---
+resource "aws_db_instance" "main" {{
+  identifier        = "cloudforge-db"
+  engine            = "postgres"
+  engine_version     = "15"
+  instance_class    = "db.t3.medium"
+  allocated_storage = 50
+  storage_encrypted = true
+
+  tags = {{
+    Name = "cloudforge-database"
+  }}
+}}
+
+# --- Cache: ElastiCache Redis ---
+resource "aws_elasticache_cluster" "main" {{
+  cluster_id      = "cloudforge-cache"
+  engine          = "redis"
+  node_type       = "cache.t3.micro"
+  num_cache_nodes = 1
+}}
+
+# --- Storage: S3 Bucket ---
+resource "aws_s3_bucket" "main" {{
+  bucket = "cloudforge-storage-bucket"
+
+  tags = {{
+    Name = "cloudforge-storage"
+  }}
+}}
+'''
+
+    return terraform_code
+
+
+# ============================================================
+# Demo: รัน Pipeline ทั้งหมดต่อกัน
+# ============================================================
+if __name__ == "__main__":
+    # Agent 1: รับ requirement จากผู้ใช้
+    test_input = "อยากทำระบบเว็บแอปสำหรับร้านค้าออนไลน์ รองรับผู้ใช้ประมาณ 5000 คน งบไม่เยอะ"
+    requirement_spec = analyze_requirement_mock(test_input)
+    print("✅ ผลลัพธ์จาก Requirements Agent:\n")
+    print(json.dumps(requirement_spec, indent=2, ensure_ascii=False))
+
+    # Agent 2: ออกแบบสถาปัตยกรรมจาก requirement spec
+    architecture = design_architecture_mock(requirement_spec)
+    print("\n✅ ผลลัพธ์จาก Architecture Agent:\n")
+    print(json.dumps(architecture, indent=2, ensure_ascii=False))
+
+    # Agent 3: สร้างโค้ด Terraform จากสถาปัตยกรรม
+    iac_code = generate_iac_mock(architecture)
+    print("\n✅ ผลลัพธ์จาก IaC Generator Agent:\n")
+    print(iac_code)
