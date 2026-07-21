@@ -1,12 +1,14 @@
 """
 CloudForge Nova Studio 3 — Mock Agent Pipeline
 ================================================
-ไฟล์นี้รวม 3 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline แรก
-ของระบบ ยังไม่ได้เรียก Claude API จริง (ใช้ hardcoded logic แทนไปพลางๆ)
+ไฟล์นี้รวม 4 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline
+พร้อม Generator-Critic Loop ระหว่าง IaC Generator กับ Security Reviewer
+ยังไม่ได้เรียก Claude API จริง (ใช้ hardcoded logic แทนไปพลางๆ)
 เพื่อทดสอบโครงสร้างของระบบ Multi-Agent ก่อน
 
 Pipeline:
-    Requirements Agent -> Architecture Agent -> IaC Generator Agent
+    Requirements Agent -> Architecture Agent
+        -> [IaC Generator Agent <-> Security Reviewer Agent] (วนจนผ่าน)
 
 พัฒนาและทดสอบครั้งแรกบน Google Colab
 ดู schema ที่ใช้ร่วมกันได้ที่ docs/requirement-spec-schema.json
@@ -227,7 +229,161 @@ resource "aws_s3_bucket" "main" {{
 
 
 # ============================================================
-# Demo: รัน Pipeline ทั้งหมดต่อกัน
+# Agent 4: Security Reviewer Agent (Mock)
+# ============================================================
+def review_security_mock(terraform_code: str) -> dict:
+    """
+    เวอร์ชันจำลองของ Security Reviewer Agent
+    รับโค้ด Terraform ที่ IaC Generator Agent สร้างมา แล้วตรวจสอบ
+    ตาม checklist ด้าน security เบื้องต้น
+
+    นี่คือจุดเริ่มต้นของ "Generator-Critic Loop" ตามที่ออกแบบไว้ใน
+    docs/architecture.md — Agent ตัวนี้ตรวจงานของ Agent ตัวอื่น
+    ก่อนปล่อยผ่านให้ใช้งานจริง
+
+    TODO: เปลี่ยนให้เรียก Claude API จริง เพื่อตรวจสอบโค้ดที่หลากหลาย
+    มากขึ้น (ตอนนี้ใช้ checklist ตายตัวแบบง่ายๆ ไปพลางๆ)
+    """
+    print("🔒 กำลังตรวจสอบ security ของโค้ด Terraform...\n")
+
+    findings = []
+
+    # เช็คที่ 1: มีการเข้ารหัสข้อมูลที่พักอยู่ (encryption at rest) หรือไม่
+    if "storage_encrypted = true" in terraform_code:
+        findings.append({
+            "check": "Database Encryption at Rest",
+            "status": "PASS",
+            "detail": "พบการตั้งค่า storage_encrypted = true ใน RDS instance"
+        })
+    else:
+        findings.append({
+            "check": "Database Encryption at Rest",
+            "status": "FAIL",
+            "detail": "ไม่พบการเข้ารหัสข้อมูลใน database ควรเพิ่ม storage_encrypted = true"
+        })
+
+    # เช็คที่ 2: Load Balancer เปิด public หรือไม่ (ควรมี ถ้าเป็น web app)
+    if 'internal           = false' in terraform_code:
+        findings.append({
+            "check": "Load Balancer Exposure",
+            "status": "INFO",
+            "detail": "Load Balancer เปิดเป็น public (internal = false) ซึ่งเหมาะสมสำหรับ web application ที่ต้องรับ traffic จากอินเทอร์เน็ต"
+        })
+
+    # เช็คที่ 3: มีการระบุ VPC แยกต่างหากหรือไม่ (ไม่ใช้ default VPC)
+    if 'resource "aws_vpc" "main"' in terraform_code:
+        findings.append({
+            "check": "Network Isolation (VPC)",
+            "status": "PASS",
+            "detail": "พบการสร้าง VPC แยกต่างหาก ไม่ได้ใช้ default VPC ของบัญชี"
+        })
+    else:
+        findings.append({
+            "check": "Network Isolation (VPC)",
+            "status": "FAIL",
+            "detail": "ไม่พบการสร้าง VPC แยก ควรหลีกเลี่ยงการใช้ default VPC"
+        })
+
+    # เช็คที่ 4: S3 Bucket มีการตั้งค่า public access หรือไม่ (ควรปิดถ้าไม่จำเป็น)
+    if 'aws_s3_bucket_public_access_block' not in terraform_code:
+        findings.append({
+            "check": "S3 Public Access Block",
+            "status": "FAIL",
+            "detail": "ไม่พบการตั้งค่า public_access_block สำหรับ S3 bucket ควรเพิ่มเพื่อป้องกันการเข้าถึงจากภายนอกโดยไม่ตั้งใจ"
+        })
+
+    # สรุปผลรวม
+    fail_count = sum(1 for f in findings if f["status"] == "FAIL")
+    overall_status = "NEEDS_REVISION" if fail_count > 0 else "APPROVED"
+
+    review_result = {
+        "overall_status": overall_status,
+        "total_checks": len(findings),
+        "failed_checks": fail_count,
+        "findings": findings
+    }
+
+    return review_result
+
+
+# ============================================================
+# Fix Function: แก้ไขโค้ดตามคำแนะนำของ Security Reviewer
+# ============================================================
+def fix_iac_mock(terraform_code: str, findings: list) -> str:
+    """
+    เวอร์ชันจำลองของฟังก์ชันแก้ไขโค้ด
+    รับโค้ด Terraform เดิม + รายการปัญหาที่ Security Reviewer พบ
+    แล้วแก้ไขโค้ดตามคำแนะนำนั้น
+
+    TODO: เปลี่ยนให้ Claude API อ่าน findings แล้วแก้โค้ดเองแบบยืดหยุ่น
+    (ตอนนี้ hardcode วิธีแก้เฉพาะปัญหาที่รู้จักไปพลางๆ)
+    """
+    fixed_code = terraform_code
+
+    for finding in findings:
+        if finding["status"] == "FAIL" and finding["check"] == "S3 Public Access Block":
+            print("🔧 กำลังแก้ไข: เพิ่ม public_access_block ให้กับ S3 bucket...\n")
+            fix_snippet = '''
+# --- Security Fix: Block public access to S3 bucket ---
+resource "aws_s3_bucket_public_access_block" "main" {
+  bucket = aws_s3_bucket.main.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+'''
+            fixed_code = fixed_code + fix_snippet
+
+    return fixed_code
+
+
+# ============================================================
+# Generator-Critic Loop: วนสร้าง-ตรวจสอบ-แก้ไข จนกว่าจะผ่าน
+# ============================================================
+def run_generator_critic_loop(architecture: dict, max_iterations: int = 3) -> dict:
+    """
+    วน Loop ระหว่าง IaC Generator Agent และ Security Reviewer Agent
+    จนกว่าโค้ดจะผ่านการตรวจสอบ (APPROVED) หรือครบจำนวนรอบสูงสุด
+
+    นี่คือแกนหลักของแนวคิด "Generator-Critic Loop" ตามที่ระบุไว้ใน
+    docs/architecture.md ข้อ 1 (หลักการออกแบบ)
+    """
+    current_code = generate_iac_mock(architecture)
+    iteration = 1
+
+    while iteration <= max_iterations:
+        print(f"\n{'='*50}")
+        print(f"🔄 รอบที่ {iteration}: ตรวจสอบโค้ด Terraform")
+        print(f"{'='*50}\n")
+
+        review = review_security_mock(current_code)
+        print(f"ผลการตรวจสอบ: {review['overall_status']} "
+              f"({review['failed_checks']} จุดที่ไม่ผ่าน จากทั้งหมด {review['total_checks']} จุด)\n")
+
+        if review["overall_status"] == "APPROVED":
+            print("✅ โค้ดผ่านการตรวจสอบทั้งหมดแล้ว! พร้อมนำไปใช้งาน\n")
+            return {
+                "final_code": current_code,
+                "final_status": "APPROVED",
+                "iterations_used": iteration
+            }
+
+        if iteration < max_iterations:
+            current_code = fix_iac_mock(current_code, review["findings"])
+        iteration += 1
+
+    print("⚠️  ครบจำนวนรอบสูงสุดแล้ว แต่ยังมีจุดที่ต้องแก้ไข ควรให้มนุษย์ตรวจสอบเพิ่มเติม\n")
+    return {
+        "final_code": current_code,
+        "final_status": "NEEDS_HUMAN_REVIEW",
+        "iterations_used": iteration - 1
+    }
+
+
+# ============================================================
+# Demo: รัน Pipeline ทั้งหมดต่อกัน (Agent 1-4 + Loop)
 # ============================================================
 if __name__ == "__main__":
     # Agent 1: รับ requirement จากผู้ใช้
@@ -241,7 +397,10 @@ if __name__ == "__main__":
     print("\n✅ ผลลัพธ์จาก Architecture Agent:\n")
     print(json.dumps(architecture, indent=2, ensure_ascii=False))
 
-    # Agent 3: สร้างโค้ด Terraform จากสถาปัตยกรรม
-    iac_code = generate_iac_mock(architecture)
-    print("\n✅ ผลลัพธ์จาก IaC Generator Agent:\n")
-    print(iac_code)
+    # Agent 3 + 4: สร้างโค้ด Terraform แล้ววน generator-critic loop จนผ่าน
+    loop_result = run_generator_critic_loop(architecture)
+
+    print(f"\n🎯 สรุปผลสุดท้าย: {loop_result['final_status']} "
+          f"(ใช้ไป {loop_result['iterations_used']} รอบ)")
+    print("\n📄 โค้ด Terraform สุดท้าย (ผ่านการตรวจสอบแล้ว):\n")
+    print(loop_result["final_code"])
