@@ -1,7 +1,7 @@
 """
 CloudForge Nova Studio 3 — Mock Agent Pipeline
 ================================================
-ไฟล์นี้รวม 4 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline
+ไฟล์นี้รวม 5 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline
 พร้อม Generator-Critic Loop ระหว่าง IaC Generator กับ Security Reviewer
 ยังไม่ได้เรียก Claude API จริง (ใช้ hardcoded logic แทนไปพลางๆ)
 เพื่อทดสอบโครงสร้างของระบบ Multi-Agent ก่อน
@@ -9,6 +9,7 @@ CloudForge Nova Studio 3 — Mock Agent Pipeline
 Pipeline:
     Requirements Agent -> Architecture Agent
         -> [IaC Generator Agent <-> Security Reviewer Agent] (วนจนผ่าน)
+        -> Documentation Agent
 
 พัฒนาและทดสอบครั้งแรกบน Google Colab
 ดู schema ที่ใช้ร่วมกันได้ที่ docs/requirement-spec-schema.json
@@ -248,7 +249,6 @@ def review_security_mock(terraform_code: str) -> dict:
 
     findings = []
 
-    # เช็คที่ 1: มีการเข้ารหัสข้อมูลที่พักอยู่ (encryption at rest) หรือไม่
     if "storage_encrypted = true" in terraform_code:
         findings.append({
             "check": "Database Encryption at Rest",
@@ -262,7 +262,6 @@ def review_security_mock(terraform_code: str) -> dict:
             "detail": "ไม่พบการเข้ารหัสข้อมูลใน database ควรเพิ่ม storage_encrypted = true"
         })
 
-    # เช็คที่ 2: Load Balancer เปิด public หรือไม่ (ควรมี ถ้าเป็น web app)
     if 'internal           = false' in terraform_code:
         findings.append({
             "check": "Load Balancer Exposure",
@@ -270,7 +269,6 @@ def review_security_mock(terraform_code: str) -> dict:
             "detail": "Load Balancer เปิดเป็น public (internal = false) ซึ่งเหมาะสมสำหรับ web application ที่ต้องรับ traffic จากอินเทอร์เน็ต"
         })
 
-    # เช็คที่ 3: มีการระบุ VPC แยกต่างหากหรือไม่ (ไม่ใช้ default VPC)
     if 'resource "aws_vpc" "main"' in terraform_code:
         findings.append({
             "check": "Network Isolation (VPC)",
@@ -284,7 +282,6 @@ def review_security_mock(terraform_code: str) -> dict:
             "detail": "ไม่พบการสร้าง VPC แยก ควรหลีกเลี่ยงการใช้ default VPC"
         })
 
-    # เช็คที่ 4: S3 Bucket มีการตั้งค่า public access หรือไม่ (ควรปิดถ้าไม่จำเป็น)
     if 'aws_s3_bucket_public_access_block' not in terraform_code:
         findings.append({
             "check": "S3 Public Access Block",
@@ -292,7 +289,6 @@ def review_security_mock(terraform_code: str) -> dict:
             "detail": "ไม่พบการตั้งค่า public_access_block สำหรับ S3 bucket ควรเพิ่มเพื่อป้องกันการเข้าถึงจากภายนอกโดยไม่ตั้งใจ"
         })
 
-    # สรุปผลรวม
     fail_count = sum(1 for f in findings if f["status"] == "FAIL")
     overall_status = "NEEDS_REVISION" if fail_count > 0 else "APPROVED"
 
@@ -352,6 +348,7 @@ def run_generator_critic_loop(architecture: dict, max_iterations: int = 3) -> di
     """
     current_code = generate_iac_mock(architecture)
     iteration = 1
+    last_review = None
 
     while iteration <= max_iterations:
         print(f"\n{'='*50}")
@@ -359,6 +356,7 @@ def run_generator_critic_loop(architecture: dict, max_iterations: int = 3) -> di
         print(f"{'='*50}\n")
 
         review = review_security_mock(current_code)
+        last_review = review
         print(f"ผลการตรวจสอบ: {review['overall_status']} "
               f"({review['failed_checks']} จุดที่ไม่ผ่าน จากทั้งหมด {review['total_checks']} จุด)\n")
 
@@ -367,7 +365,8 @@ def run_generator_critic_loop(architecture: dict, max_iterations: int = 3) -> di
             return {
                 "final_code": current_code,
                 "final_status": "APPROVED",
-                "iterations_used": iteration
+                "iterations_used": iteration,
+                "review_findings": review["findings"]
             }
 
         if iteration < max_iterations:
@@ -378,12 +377,69 @@ def run_generator_critic_loop(architecture: dict, max_iterations: int = 3) -> di
     return {
         "final_code": current_code,
         "final_status": "NEEDS_HUMAN_REVIEW",
-        "iterations_used": iteration - 1
+        "iterations_used": iteration - 1,
+        "review_findings": last_review["findings"] if last_review else []
     }
 
 
 # ============================================================
-# Demo: รัน Pipeline ทั้งหมดต่อกัน (Agent 1-4 + Loop)
+# Agent 5: Documentation Agent (Mock)
+# ============================================================
+def generate_documentation_mock(
+    requirement_spec: dict,
+    architecture: dict,
+    loop_result: dict
+) -> str:
+    """
+    เวอร์ชันจำลองของ Documentation Agent
+    รับผลลัพธ์จากทุก Agent ก่อนหน้า (Requirements, Architecture,
+    IaC + Security Review) แล้วสรุปเป็นเอกสาร Markdown ที่มนุษย์
+    อ่านเข้าใจง่าย เหมาะสำหรับส่งต่อให้ทีมงานหรือลูกค้า
+
+    TODO: เปลี่ยนให้เรียก Claude API จริง เพื่อเขียนคำอธิบายที่ลื่นไหล
+    และปรับตามบริบทมากขึ้น (ตอนนี้ใช้ template ตายตัว)
+    """
+    print("📝 กำลังสร้างเอกสารสรุปโครงการ...\n")
+
+    components_list = "\n".join(
+        [f"- **{c['name']}**: {c['service']} — {c['purpose']}"
+         for c in architecture.get("components", [])]
+    )
+
+    doc = f"""# สรุปโครงการ: {requirement_spec.get('project_name', 'ไม่มีชื่อโครงการ')}
+
+## 1. ภาพรวมความต้องการ (Requirements)
+
+- **ประเภท Workload**: {requirement_spec.get('workload_type')}
+- **จำนวนผู้ใช้ที่คาดการณ์**: {requirement_spec.get('scale', {}).get('expected_users', '-')} คน
+- **ระดับงบประมาณ**: {requirement_spec.get('budget', {}).get('tier')}
+- **มาตรฐาน Compliance ที่ต้องปฏิบัติตาม**: {', '.join(requirement_spec.get('compliance', {}).get('standards', []))}
+
+## 2. สถาปัตยกรรมที่ออกแบบ
+
+**Cloud Provider**: {architecture.get('provider', '-').upper()}
+
+**องค์ประกอบหลักของระบบ**:
+{components_list}
+
+**ค่าใช้จ่ายโดยประมาณต่อเดือน**: {architecture.get('estimated_monthly_cost_usd', '-')}
+
+## 3. สถานะ Infrastructure-as-Code
+
+- **สถานะสุดท้าย**: {loop_result.get('final_status')}
+- **จำนวนรอบที่ใช้ตรวจสอบ**: {loop_result.get('iterations_used')} รอบ
+
+## 4. หมายเหตุ
+
+เอกสารนี้สร้างขึ้นโดยอัตโนมัติจากระบบ CloudForge Nova Studio 3
+(เวอร์ชันจำลอง — ยังไม่ได้เชื่อมต่อ Claude API จริง)
+"""
+
+    return doc
+
+
+# ============================================================
+# Demo: รัน Pipeline ทั้งหมดต่อกัน (Agent 1-5 + Loop)
 # ============================================================
 if __name__ == "__main__":
     # Agent 1: รับ requirement จากผู้ใช้
@@ -404,3 +460,12 @@ if __name__ == "__main__":
           f"(ใช้ไป {loop_result['iterations_used']} รอบ)")
     print("\n📄 โค้ด Terraform สุดท้าย (ผ่านการตรวจสอบแล้ว):\n")
     print(loop_result["final_code"])
+
+    # Agent 5: สร้างเอกสารสรุปโครงการจากผลลัพธ์ทั้งหมด
+    final_documentation = generate_documentation_mock(
+        requirement_spec=requirement_spec,
+        architecture=architecture,
+        loop_result=loop_result
+    )
+    print("\n✅ เอกสารสรุปโครงการที่สร้างได้:\n")
+    print(final_documentation)
