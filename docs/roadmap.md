@@ -18,17 +18,22 @@
 - [x] สร้าง IaC Generator Agent (สร้าง Terraform สำหรับ AWS)
 - [x] ทดสอบ flow แบบ end-to-end: requirement → spec → architecture → Terraform
 
-> หมายเหตุ: ทั้งหมดนี้พัฒนาและทดสอบบน Google Colab เป็นเวอร์ชัน mock
-> (ยังไม่เชื่อมต่อ Claude API จริง) ดูโค้ดได้ที่ `agents/mock_pipeline.py`
+> พัฒนาและทดสอบบน Google Colab เป็นเวอร์ชัน mock (ยังไม่เชื่อมต่อ Claude API จริง)
+> ดูโค้ดได้ที่ `agents/mock_pipeline.py`
 
-## Phase 2 — Multi-Agent Review Loop 🚧 กำลังดำเนินการ
+## Phase 2 — Multi-Agent Review Loop ✅ เสร็จสมบูรณ์
 
 เป้าหมาย: เพิ่มการตรวจสอบงานระหว่าง agent (generator–critic pattern)
 
 - [x] สร้าง Security Reviewer Agent (ตรวจ IaC ที่สร้างขึ้น)
 - [x] เพิ่มระบบ feedback loop (agent แก้ไขงานตามคำแนะนำของ critic) — ทดสอบแล้ว: APPROVED ภายใน 2 รอบ
-- [ ] สร้าง QA/Critic Agent แยกต่างหาก (ตรวจสอบ cross-check งานของ agent อื่นในภาพรวม)
-- [ ] เพิ่ม automated checks จริง (tflint, checkov, tfsec) แทนการเช็คแบบ hardcode
+- [x] สร้าง QA/Critic Agent แยกต่างหาก (ตรวจสอบความสอดคล้องกันทั้งระบบในภาพรวม เช่น budget vs cost, data residency)
+- [x] เพิ่ม automated checks จริง (checkov) แทนการเช็คแบบ hardcode
+
+> เชื่อมต่อกับ checkov (เครื่องมือสแกน security มาตรฐานอุตสาหกรรมจริง) สำเร็จแล้ว
+> ระบบเขียนไฟล์ Terraform ลงดิสก์จริง แล้วให้ checkov สแกนจริง พบปัญหาจริง เช่น
+> S3 bucket ไม่ได้เข้ารหัสด้วย KMS, Public ALB ไม่มี WAF ป้องกัน ฯลฯ
+> ดูโค้ดได้ที่ `agents/checkov_pipeline.py`
 
 ## Phase 2.5 — Documentation Automation ✅ เสร็จสมบูรณ์ (เวอร์ชัน Mock)
 
@@ -42,13 +47,14 @@
 - [ ] เปลี่ยน Requirements Agent ให้เรียก Claude API จริง
 - [ ] เปลี่ยน Architecture Agent ให้เรียก Claude API จริง
 - [ ] เปลี่ยน IaC Generator Agent ให้เรียก Claude API จริง
-- [ ] เปลี่ยน Security Reviewer Agent ให้เรียก Claude API จริง
+- [ ] เปลี่ยน Security Reviewer Agent ให้อ่านผล checkov จริง แล้วให้ AI แนะนำวิธีแก้ (แทน hardcoded fix)
 - [ ] เปลี่ยน Documentation Agent ให้เรียก Claude API จริง
 
 ## Phase 4 — Orchestrator Agent
 
-- [ ] สร้าง Orchestrator Agent ที่คุมทั้ง 5 agent ให้ทำงานเป็นระบบเดียวอัตโนมัติ
-- [ ] ผู้ใช้พิมพ์ requirement ครั้งเดียว ระบบรันจนจบ pipeline เอง
+- [ ] สร้าง Orchestrator Agent ที่คุมทั้งหมด agent ให้ทำงานเป็นระบบเดียวอัตโนมัติ
+- [ ] ผู้ใช้พิมพ์ requirement ครั้งเดียว ระบบรันจนจบ pipeline เอง (รวม checkov scan)
+- [ ] รวม mock_pipeline.py และ checkov_pipeline.py เป็นระบบเดียวที่สมบูรณ์
 
 ## Phase 5 — Multi-Cloud
 
@@ -68,4 +74,5 @@
 
 - [README](../README.md)
 - [Architecture](./architecture.md)
-- [Agent Pipeline (โค้ด)](../agents/mock_pipeline.py)
+- [Agent Pipeline — เวอร์ชัน Mock ทั้งหมด](../agents/mock_pipeline.py)
+- [Agent Pipeline — เวอร์ชันเชื่อม Checkov จริง](../agents/checkov_pipeline.py)
