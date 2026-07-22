@@ -1,8 +1,9 @@
 """
 CloudForge Nova Studio 3 — Mock Agent Pipeline
 ================================================
-ไฟล์นี้รวม 5 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline
+ไฟล์นี้รวม 6 Agent เวอร์ชันจำลอง (mock) ที่ทำงานต่อกันเป็น pipeline
 พร้อม Generator-Critic Loop ระหว่าง IaC Generator กับ Security Reviewer
+และ QA/Critic Agent ที่ตรวจสอบความสอดคล้องกันทั้งระบบในภาพรวม
 ยังไม่ได้เรียก Claude API จริง (ใช้ hardcoded logic แทนไปพลางๆ)
 เพื่อทดสอบโครงสร้างของระบบ Multi-Agent ก่อน
 
@@ -10,6 +11,7 @@ Pipeline:
     Requirements Agent -> Architecture Agent
         -> [IaC Generator Agent <-> Security Reviewer Agent] (วนจนผ่าน)
         -> Documentation Agent
+        -> QA/Critic Agent (ตรวจสอบความสอดคล้องทั้งระบบ)
 
 พัฒนาและทดสอบครั้งแรกบน Google Colab
 ดู schema ที่ใช้ร่วมกันได้ที่ docs/requirement-spec-schema.json
@@ -439,7 +441,111 @@ def generate_documentation_mock(
 
 
 # ============================================================
-# Demo: รัน Pipeline ทั้งหมดต่อกัน (Agent 1-5 + Loop)
+# Agent 6: QA/Critic Agent (Mock)
+# ============================================================
+def qa_critic_review_mock(
+    requirement_spec: dict,
+    architecture: dict,
+    loop_result: dict
+) -> dict:
+    """
+    เวอร์ชันจำลองของ QA/Critic Agent
+    ตรวจสอบ "ความสอดคล้องกันทั้งระบบ" ระหว่างผลลัพธ์ของ Agent ต่างๆ
+    ไม่ได้ตรวจแค่โค้ด Terraform แบบ Security Reviewer แต่เช็คว่า
+    สิ่งที่ Agent ตัวอื่นทำมา ตรงกับ requirement เดิมที่ผู้ใช้ขอจริงหรือไม่
+
+    ต่างจาก Security Reviewer Agent ตรงที่:
+    - Security Reviewer  -> ตรวจโค้ด Terraform อย่างเดียว (เจาะลึกด้าน security)
+    - QA/Critic Agent     -> ตรวจความสอดคล้องข้าม Agent ทั้งหมด (มุมกว้าง)
+
+    TODO: เปลี่ยนให้เรียก Claude API จริง เพื่อวิเคราะห์ความสอดคล้อง
+    ที่ซับซ้อนกว่านี้ (ตอนนี้ใช้ rule ตายตัวไปพลางๆ)
+    """
+    print("🕵️ QA/Critic Agent: กำลังตรวจสอบความสอดคล้องกันทั้งระบบ...\n")
+
+    issues = []
+
+    budget_tier = requirement_spec.get("budget", {}).get("tier")
+    estimated_cost = architecture.get("estimated_monthly_cost_usd", "")
+    if budget_tier == "medium" and "1200" in estimated_cost:
+        issues.append({
+            "check": "Budget Consistency",
+            "status": "WARNING",
+            "detail": f"งบระดับ '{budget_tier}' แต่ค่าใช้จ่ายประมาณการสูงสุดถึง 1200 USD/เดือน ควรตรวจสอบว่าลูกค้ารับได้จริงหรือไม่"
+        })
+    else:
+        issues.append({
+            "check": "Budget Consistency",
+            "status": "PASS",
+            "detail": "ระดับงบประมาณสอดคล้องกับค่าใช้จ่ายประมาณการ"
+        })
+
+    expected_users = requirement_spec.get("scale", {}).get("expected_users", 0)
+    compute_component = next(
+        (c for c in architecture.get("components", []) if c["name"] == "Compute"), None
+    )
+    if expected_users > 50000 and compute_component and "Auto Scaling Group" in compute_component.get("service", ""):
+        issues.append({
+            "check": "Scale vs Compute Sizing",
+            "status": "WARNING",
+            "detail": f"ผู้ใช้คาดการณ์ {expected_users} คน อาจต้องพิจารณา multi-region หรือ container orchestration เพิ่มเติม"
+        })
+    else:
+        issues.append({
+            "check": "Scale vs Compute Sizing",
+            "status": "PASS",
+            "detail": f"ขนาด compute ที่เลือกเหมาะสมกับจำนวนผู้ใช้ {expected_users} คน"
+        })
+
+    data_residency = requirement_spec.get("compliance", {}).get("data_residency", [])
+    preferred_region = requirement_spec.get("cloud_preference", {}).get("preferred_regions", [])
+    if "Thailand" in data_residency and not any("ap-southeast" in r for r in preferred_region):
+        issues.append({
+            "check": "Data Residency Compliance",
+            "status": "FAIL",
+            "detail": "ต้องการเก็บข้อมูลในประเทศไทย แต่ region ที่เลือกไม่ใช่ ap-southeast ควรตรวจสอบ"
+        })
+    else:
+        issues.append({
+            "check": "Data Residency Compliance",
+            "status": "PASS",
+            "detail": "Region ที่เลือกสอดคล้องกับข้อกำหนด data residency"
+        })
+
+    if loop_result.get("final_status") != "APPROVED":
+        issues.append({
+            "check": "IaC Security Approval",
+            "status": "FAIL",
+            "detail": f"โค้ด Terraform ยังมีสถานะ '{loop_result.get('final_status')}' ไม่ควรปล่อยให้ใช้งานจนกว่าจะ APPROVED"
+        })
+    else:
+        issues.append({
+            "check": "IaC Security Approval",
+            "status": "PASS",
+            "detail": "โค้ด Terraform ผ่านการตรวจสอบ security แล้ว (APPROVED)"
+        })
+
+    fail_count = sum(1 for i in issues if i["status"] == "FAIL")
+    warning_count = sum(1 for i in issues if i["status"] == "WARNING")
+
+    if fail_count > 0:
+        overall = "REJECTED"
+    elif warning_count > 0:
+        overall = "APPROVED_WITH_WARNINGS"
+    else:
+        overall = "APPROVED"
+
+    return {
+        "overall_status": overall,
+        "total_checks": len(issues),
+        "failed_checks": fail_count,
+        "warning_checks": warning_count,
+        "issues": issues
+    }
+
+
+# ============================================================
+# Demo: รัน Pipeline ทั้งหมดต่อกัน (Agent 1-6 + Loop)
 # ============================================================
 if __name__ == "__main__":
     # Agent 1: รับ requirement จากผู้ใช้
@@ -469,3 +575,12 @@ if __name__ == "__main__":
     )
     print("\n✅ เอกสารสรุปโครงการที่สร้างได้:\n")
     print(final_documentation)
+
+    # Agent 6: ตรวจสอบความสอดคล้องกันทั้งระบบ (มุมกว้าง)
+    qa_result = qa_critic_review_mock(
+        requirement_spec=requirement_spec,
+        architecture=architecture,
+        loop_result=loop_result
+    )
+    print(f"\n✅ ผลการตรวจสอบขั้นสุดท้าย (QA/Critic Agent): {qa_result['overall_status']}\n")
+    print(json.dumps(qa_result, indent=2, ensure_ascii=False))
