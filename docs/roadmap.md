@@ -39,7 +39,18 @@
 
 - [x] สร้าง Documentation Agent (สร้างเอกสารสรุปอัตโนมัติจากผลลัพธ์ทุก Agent)
 
-## Phase 3 — เชื่อมต่อ AI จริง (ถัดไป)
+## Phase 4 — Orchestrator Agent ✅ เสร็จสมบูรณ์
+
+- [x] สร้าง Orchestrator Agent ที่คุมทั้งหมด agent ให้ทำงานเป็นระบบเดียวอัตโนมัติ
+- [x] ผู้ใช้พิมพ์ requirement ครั้งเดียว ระบบรันจนจบ pipeline เอง (รวม checkov scan จริง)
+- [ ] รวม mock_pipeline.py และ checkov_pipeline.py เป็นระบบเดียวที่สมบูรณ์ (ตอนนี้ orchestrator.py ใช้ checkov จริงแล้ว แต่ยังไม่มี retry loop อัตโนมัติเหมือน mock_pipeline.py)
+
+> ทดสอบสำเร็จ: เรียกฟังก์ชันเดียว `run_cloudforge_pipeline()` แล้วระบบรันครบ 6 Agent
+> อัตโนมัติ ตั้งแต่รับ requirement จนถึงสแกน security ด้วย checkov จริง และสรุปผล
+> QA/Critic ตัดสินใจเองว่า APPROVED หรือ REJECTED
+> ดูโค้ดได้ที่ `agents/orchestrator.py`
+
+## Phase 3 — เชื่อมต่อ AI จริง (ขั้นต่อไป)
 
 เป้าหมาย: เปลี่ยนทุก Agent จาก mock logic ให้เรียก Claude API จริง
 
@@ -49,12 +60,7 @@
 - [ ] เปลี่ยน IaC Generator Agent ให้เรียก Claude API จริง
 - [ ] เปลี่ยน Security Reviewer Agent ให้อ่านผล checkov จริง แล้วให้ AI แนะนำวิธีแก้ (แทน hardcoded fix)
 - [ ] เปลี่ยน Documentation Agent ให้เรียก Claude API จริง
-
-## Phase 4 — Orchestrator Agent
-
-- [ ] สร้าง Orchestrator Agent ที่คุมทั้งหมด agent ให้ทำงานเป็นระบบเดียวอัตโนมัติ
-- [ ] ผู้ใช้พิมพ์ requirement ครั้งเดียว ระบบรันจนจบ pipeline เอง (รวม checkov scan)
-- [ ] รวม mock_pipeline.py และ checkov_pipeline.py เป็นระบบเดียวที่สมบูรณ์
+- [ ] เพิ่ม retry loop ให้ Orchestrator วนแก้ไขอัตโนมัติเมื่อ QA/Critic ตัดสิน REJECTED
 
 ## Phase 5 — Multi-Cloud
 
@@ -76,3 +82,4 @@
 - [Architecture](./architecture.md)
 - [Agent Pipeline — เวอร์ชัน Mock ทั้งหมด](../agents/mock_pipeline.py)
 - [Agent Pipeline — เวอร์ชันเชื่อม Checkov จริง](../agents/checkov_pipeline.py)
+- [Orchestrator Agent — ตัวคุมกลาง](../agents/orchestrator.py)
