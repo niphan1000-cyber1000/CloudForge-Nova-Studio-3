@@ -24,7 +24,15 @@ security/compliance โดยไม่ต้องพึ่งพาความ
 
 ติดตั้งไลบรารีที่จำเป็นก่อน
 
-pip install -r requirements.txt
+pip install -r requirements.txtตั้งค่า API Key (จำเป็นสำหรับ Phase 3 เป็นต้นไป)
+
+คัดลอกไฟล์ .env.example เป็น .env แล้วใส่ Anthropic API Key ของคุณ
+
+cp .env.example .env
+
+แก้ไขไฟล์ .env ใส่ค่าจริงแทน sk-ant-your-api-key-here
+
+ห้าม commit ไฟล์ .env ขึ้น GitHub เด็ดขาด (ไฟล์นี้ถูกกันไว้ใน .gitignore แล้ว)
 
 รันตัวอย่างผ่าน Orchestrator Agent
 
